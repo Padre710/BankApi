@@ -280,7 +280,7 @@ namespace BankApi.Services.Implementations
 
         public async Task<AccountReadDto?> GetAccountByIdAsync(int id)
         {
-            try
+         try 
             {
                 _logger.LogInformation("Fetching account by ID {Id}", id);
 
