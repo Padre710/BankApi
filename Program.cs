@@ -110,6 +110,14 @@ builder.Services.AddScoped<ITransactionRepository, TransactionRepository>();
 builder.Services.AddScoped<ITransactionService, TransactionService>();
 builder.Services.AddSingleton<RedisCacheService>();
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("Frontend", policy =>
+        policy.WithOrigins("http://localhost:5173")
+              .AllowAnyHeader()
+              .AllowAnyMethod());
+});
+
 
 var app = builder.Build();
 
@@ -124,6 +132,7 @@ app.UseHttpsRedirection();
 
 // ✅ Make sure authentication comes before authorization
 app.UseSerilogRequestLogging();
+app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();
 
