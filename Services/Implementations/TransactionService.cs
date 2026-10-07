@@ -228,6 +228,7 @@
 using BankApi.Constants;
 using BankApi.Db;
 using BankApi.DTO;
+using BankApi.Helpers;
 using BankApi.Models;
 using BankApi.Repositories.Interfaces;
 using BankApi.Services.Interfaces;
@@ -466,6 +467,12 @@ namespace BankApi.Services.Implementations
             {
                 Log.Information("Transfer called: From {FromAccountId} To {ToAccountId}, Amount {Amount}, User {UserId}, Role {Role}", dto.FromAccountId, dto.ToAccountId, dto.Amount, userId, role);
 
+                if (dto.FromAccountId == dto.ToAccountId)
+                {
+                    Log.Warning("Transfer rejected: same account {AccountId} on both sides", dto.FromAccountId);
+                    throw new Exception("Cannot transfer to the same account.");
+                }
+
                 if (role == Roles.Customer)
                 {
                     var owner = await _context.Accounts
@@ -560,7 +567,128 @@ namespace BankApi.Services.Implementations
                 throw;
             }
         }
+        public async Task<StatementDto> GetMonthlyStatement(int accountId, int year, int month, int userId, string role)
+        {
+            try
+            {
+                Log.Information("GetMonthlyStatement called for Account {AccountId}, {Year}-{Month}, User {UserId}, Role {Role}", accountId, year, month, userId, role);
 
+                if (year < 2000 || year > DateTime.Now.Year)
+                    throw new ArgumentException("Year is out of range.");
+
+                if (month < 1 || month > 12)
+                    throw new ArgumentException("Month must be between 1 and 12.");
+
+                var periodStart = new DateTime(year, month, 1);
+                var periodEndExclusive = periodStart.AddMonths(1);
+
+                if (periodStart > DateTime.Now)
+                    throw new ArgumentException("Cannot generate a statement for a future month.");
+
+                var account = await _context.Accounts.FindAsync(accountId);
+
+                if (account == null || (role == Roles.Customer && account.UserId != userId))
+                {
+                    Log.Warning("Statement denied or account missing: Account {AccountId}, User {UserId}", accountId, userId);
+                    throw new KeyNotFoundException("Account not found.");
+                }
+
+                var all = (await _repo.GetByAccountId(accountId))
+                    .OrderBy(t => t.timestamp)
+                    .ThenBy(t => t.Id)
+                    .ToList();
+
+                var afterPeriod = all
+                    .Where(t => t.timestamp >= periodEndExclusive)
+                    .Sum(t => Signed(t));
+
+                var inPeriod = all
+                    .Where(t => t.timestamp >= periodStart && t.timestamp < periodEndExclusive)
+                    .ToList();
+                var transferIds = inPeriod
+    .Where(t => t.TransferId.HasValue)
+    .Select(t => t.TransferId!.Value)
+    .Distinct()
+    .ToList();
+
+                var otherLegs = await _context.Transactions
+                    .Where(t => t.TransferId.HasValue && transferIds.Contains(t.TransferId.Value) && t.AccountId != accountId)
+                    .Include(t => t.Account)
+                    .ToListAsync();
+                var closing = account.Balance - afterPeriod;
+                var opening = closing - inPeriod.Sum(t => Signed(t));
+
+                var running = opening;
+                var lines = new List<StatementLineDto>();
+                foreach (var t in inPeriod)
+                {
+                    running += Signed(t);
+                    lines.Add(new StatementLineDto
+                    {
+                        Date = t.timestamp,
+                        Description = Describe(t, otherLegs),
+                        Type = t.TransactionType.ToString(),
+                        Direction = t.TransactionDirection.ToString(),
+                        Amount = Math.Round(t.Amount, 2),
+                        BalanceAfter = Math.Round(running, 2),
+                        TransferId = t.TransferId
+                    });
+                }
+
+                var statement = new StatementDto
+                {
+                    AccountId = account.Id,
+                    AccountNumber = account.AccountNumber,
+                    AccountName = account.AccountName,
+                    Currency = account.Currency.ToString(),
+                    Year = year,
+                    Month = month,
+                    PeriodStart = periodStart,
+                    PeriodEnd = periodEndExclusive.AddDays(-1),
+                    OpeningBalance = Math.Round(opening, 2),
+                    TotalCredits = Math.Round(inPeriod.Where(t => t.TransactionDirection == TransactionDirection.Credit).Sum(t => t.Amount), 2),
+                    TotalDebits = Math.Round(inPeriod.Where(t => t.TransactionDirection == TransactionDirection.Debit).Sum(t => t.Amount), 2),
+                    ClosingBalance = Math.Round(closing, 2),
+                    TransactionCount = lines.Count,
+                    Lines = lines
+                };
+
+                Log.Information("Statement built for Account {AccountId}, {Year}-{Month}: {Count} transactions", accountId, year, month, lines.Count);
+                return statement;
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Error building statement for Account {AccountId}, {Year}-{Month}", accountId, year, month);
+                throw;
+            }
+        }
+
+        public async Task<byte[]> GetMonthlyStatementPdf(int accountId, int year, int month, int userId, string role)
+        {
+            var statement = await GetMonthlyStatement(accountId, year, month, userId, role);
+            return StatementPdfGenerator.Generate(statement);
+        }
+
+        private static double Signed(Transaction t) =>
+            t.TransactionDirection == TransactionDirection.Credit ? t.Amount : -t.Amount;
+
+        private static string Describe(Transaction t, List<Transaction> otherLegs)
+        {
+            if (t.TransactionType == TransactionType.Deposit) return "Deposit";
+            if (t.TransactionType == TransactionType.Withdraw) return "Withdrawal";
+
+            var other = otherLegs.FirstOrDefault(o => o.TransferId == t.TransferId)?.Account;
+            var who = other == null
+                ? "unknown account"
+                : $"{other.AccountName} (****{LastFour(other.AccountNumber)})";
+
+            return t.TransactionDirection == TransactionDirection.Debit
+                ? $"Transfer to {who}"
+                : $"Transfer from {who}";
+        }
+
+        private static string LastFour(string number) =>
+            number.Length <= 4 ? number : number.Substring(number.Length - 4);
         private static TransactionReadDto MapToDto(Transaction t) =>
             new TransactionReadDto
             {

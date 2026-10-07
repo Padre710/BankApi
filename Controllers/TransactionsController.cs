@@ -415,6 +415,69 @@ namespace BankApi.Controllers
             return Ok(await _service.Transfer(dto, CurrentUserId, Role));
         }
 
+        /// <summary>
+        /// Returns a monthly statement for one account: opening balance, every
+        /// transaction in the month with a running balance, totals, and closing balance.
+        /// Customers can only request their own accounts; Tellers and Admins can request any.
+        /// </summary>
+        /// <param name="accountId">The account to produce a statement for.</param>
+        /// <param name="year">Four-digit year, e.g. 2026.</param>
+        /// <param name="month">Month number, 1-12.</param>
+        /// <response code="200">The statement.</response>
+        /// <response code="400">Invalid or future month/year.</response>
+        /// <response code="404">Account not found (or not yours).</response>
+        [HttpGet("statement/{accountId}")]
+        [Authorize(Roles = Roles.AllRoles)]
+        [ProducesResponseType(typeof(StatementDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetStatement(int accountId, [FromQuery] int year, [FromQuery] int month)
+        {
+            try
+            {
+                return Ok(await _service.GetMonthlyStatement(accountId, year, month, CurrentUserId, Role));
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ex.Message);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Same statement as above, returned as a downloadable PDF file.
+        /// </summary>
+        /// <param name="accountId">The account to produce a statement for.</param>
+        /// <param name="year">Four-digit year, e.g. 2026.</param>
+        /// <param name="month">Month number, 1-12.</param>
+        /// <response code="200">A PDF file.</response>
+        /// <response code="400">Invalid or future month/year.</response>
+        /// <response code="404">Account not found (or not yours).</response>
+        [HttpGet("statement/{accountId}/pdf")]
+        [Authorize(Roles = Roles.AllRoles)]
+        [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK, "application/pdf")]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetStatementPdf(int accountId, [FromQuery] int year, [FromQuery] int month)
+        {
+            try
+            {
+                var bytes = await _service.GetMonthlyStatementPdf(accountId, year, month, CurrentUserId, Role);
+                return File(bytes, "application/pdf", $"statement_{accountId}_{year}-{month:D2}.pdf");
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ex.Message);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
         [HttpGet("filter")]
         [Authorize(Roles = Roles.AdminOrTeller)]
         public async Task<IActionResult> Filter(

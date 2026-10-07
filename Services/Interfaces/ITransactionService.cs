@@ -15,5 +15,7 @@ namespace BankApi.Services.Interfaces
         Task<TransactionResponseDto> Transfer(TransferDto dto, int userId, string role);
         Task<List<TransactionReadDto>> Filter(TransactionType? type, TransactionDirection? direction,
             DateTime? from, DateTime? to);
+        Task<StatementDto> GetMonthlyStatement(int accountId, int year, int month, int userId, string role);
+        Task<byte[]> GetMonthlyStatementPdf(int accountId, int year, int month, int userId, string role);
     }
 }
