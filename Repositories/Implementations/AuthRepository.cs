@@ -1,41 +1,4 @@
-﻿//using BankApi.Db;
-//using BankApi.Models;
-//using BankApi.Repositories.Interfaces;
-//using Microsoft.EntityFrameworkCore;
-//using System.Threading.Tasks;
-
-//namespace BankApi.Repositories.Implementations
-//{
-//    public class AuthRepository : IAuthRepository
-//    {
-//        private readonly AppDbContext _context;
-
-//        public AuthRepository(AppDbContext context)
-//        {
-//            _context = context;
-//        }
-
-//        public async Task<User?> GetUserByEmailAsync(string email)
-//        {
-//            return await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
-//        }
-
-//        public async Task AddUserAsync(User user)
-//        {
-//            await _context.Users.AddAsync(user);
-//            await _context.SaveChangesAsync();
-//        }
-
-//        public async Task<User?> GetUserWithAccountsAsync(int userId)
-//        {
-//            return await _context.Users
-//                .Include(u => u.Accounts)
-//                .FirstOrDefaultAsync(u => u.Id == userId);
-//        }
-//    }
-//}
-
-using BankApi.Db;
+﻿using BankApi.Db;
 using BankApi.Models;
 using BankApi.Repositories.Interfaces;
 using Microsoft.EntityFrameworkCore;
