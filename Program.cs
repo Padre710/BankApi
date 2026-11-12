@@ -75,6 +75,10 @@ builder.Services.AddControllers()
     .AddJsonOptions(options =>
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
+// ✅ Fail fast if the JWT signing key is missing (it lives in user-secrets, not in appsettings.json)
+if (string.IsNullOrWhiteSpace(builder.Configuration["Jwt:Key"]))
+    throw new InvalidOperationException("Jwt:Key is not set. Run: dotnet user-secrets set \"Jwt:Key\" \"<a long random string>\"");
+
 // ✅ Configure JWT Authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
