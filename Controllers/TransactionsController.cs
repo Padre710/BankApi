@@ -19,60 +19,60 @@ namespace BankApi.Controllers
             _service = service;
         }
 
-        private int CurrentUserId => int.Parse(User.FindFirst(ClaimTypes.NameIdentifier).Value);
-        private string Role => User.FindFirst(ClaimTypes.Role)?.Value;
+        private int CurrentUserId => int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+        private string Role => User.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
 
         [HttpGet("byAccount/{accountId}")]
-        [Authorize(Roles = Roles.AllRoles)]
+        [Authorize]
         public async Task<IActionResult> GetByAccountId(int accountId)
         {
             return Ok(await _service.GetByAccountId(accountId, CurrentUserId, Role));
         }
 
         [HttpGet]
-        [Authorize(Roles = Roles.Admin)]
+        [Authorize(Policy = Policies.AdminOnly)]
         public async Task<IActionResult> GetAll()
         {
             return Ok(await _service.GetAll());
         }
 
         [HttpGet("byTransaction/{id}")]
-        [Authorize(Roles = Roles.AllRoles)]
+        [Authorize]
         public async Task<IActionResult> GetByTransactionId(int id)
         {
             return Ok(await _service.GetByTransactionId(id, CurrentUserId, Role));
         }
 
         [HttpGet("byTransfer/{transferId}")]
-        [Authorize(Roles = Roles.AdminOrTeller)]
+        [Authorize(Policy = Policies.TellerOrAdmin)]
         public async Task<IActionResult> GetByTransferId(Guid transferId)
         {
             return Ok(await _service.GetByTransferId(transferId));
         }
 
         [HttpGet("byUser/{userId}")]
-        [Authorize(Roles = Roles.AllRoles)]
+        [Authorize]
         public async Task<IActionResult> GetByUserId(int userId)
         {
             return Ok(await _service.GetByUserId(userId, Role, CurrentUserId));
         }
 
         [HttpPost("deposit")]
-        [Authorize(Roles = Roles.AdminOrTeller)]
+        [Authorize(Policy = Policies.TellerOrAdmin)]
         public async Task<IActionResult> Deposit(DepositDto dto)
         {
             return Ok(await _service.Deposit(dto));
         }
 
         [HttpPost("withdraw")]
-        [Authorize(Roles = Roles.AdminOrTeller)]
+        [Authorize(Policy = Policies.TellerOrAdmin)]
         public async Task<IActionResult> Withdraw(WithdrawDto dto)
         {
             return Ok(await _service.Withdraw(dto));
         }
 
         [HttpPost("transfer")]
-        [Authorize(Roles = Roles.AllRoles)]
+        [Authorize]
         public async Task<IActionResult> Transfer(TransferDto dto)
         {
             return Ok(await _service.Transfer(dto, CurrentUserId, Role));
@@ -90,24 +90,13 @@ namespace BankApi.Controllers
         /// <response code="400">Invalid or future month/year.</response>
         /// <response code="404">Account not found (or not yours).</response>
         [HttpGet("statement/{accountId}")]
-        [Authorize(Roles = Roles.AllRoles)]
+        [Authorize]
         [ProducesResponseType(typeof(StatementDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetStatement(int accountId, [FromQuery] int year, [FromQuery] int month)
         {
-            try
-            {
-                return Ok(await _service.GetMonthlyStatement(accountId, year, month, CurrentUserId, Role));
-            }
-            catch (KeyNotFoundException ex)
-            {
-                return NotFound(ex.Message);
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(ex.Message);
-            }
+            return Ok(await _service.GetMonthlyStatement(accountId, year, month, CurrentUserId, Role));
         }
 
         /// <summary>
@@ -120,29 +109,18 @@ namespace BankApi.Controllers
         /// <response code="400">Invalid or future month/year.</response>
         /// <response code="404">Account not found (or not yours).</response>
         [HttpGet("statement/{accountId}/pdf")]
-        [Authorize(Roles = Roles.AllRoles)]
+        [Authorize]
         [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK, "application/pdf")]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetStatementPdf(int accountId, [FromQuery] int year, [FromQuery] int month)
         {
-            try
-            {
-                var bytes = await _service.GetMonthlyStatementPdf(accountId, year, month, CurrentUserId, Role);
-                return File(bytes, "application/pdf", $"statement_{accountId}_{year}-{month:D2}.pdf");
-            }
-            catch (KeyNotFoundException ex)
-            {
-                return NotFound(ex.Message);
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(ex.Message);
-            }
+            var bytes = await _service.GetMonthlyStatementPdf(accountId, year, month, CurrentUserId, Role);
+            return File(bytes, "application/pdf", $"statement_{accountId}_{year}-{month:D2}.pdf");
         }
 
         [HttpGet("filter")]
-        [Authorize(Roles = Roles.AdminOrTeller)]
+        [Authorize(Policy = Policies.TellerOrAdmin)]
         public async Task<IActionResult> Filter(
             [FromQuery] TransactionType? type,
             [FromQuery] TransactionDirection? direction,

@@ -1,4 +1,5 @@
 ﻿using BankApi.DTO;
+using BankApi.Exceptions;
 using BankApi.Helpers;
 using BankApi.Models;
 using BankApi.Services;
@@ -37,7 +38,7 @@ namespace BankApi.Services.Implementations
             if (existingUser != null)
             {
                 _logger.LogWarning("Registration failed — Email already exists: {Email}", dto.Email);
-                return "Email already exists.";
+                throw new ConflictException("Email already exists.");
             }
 
             PasswordHelper.CreatePasswordHash(dto.Password, out byte[] hash, out byte[] salt);
@@ -74,7 +75,7 @@ namespace BankApi.Services.Implementations
             if (attempts >= 5)
             {
                 _logger.LogWarning("Rate limit reached for {Email}. Attempts: {Attempts}", dto.Email, attempts);
-                throw new Exception("Too many failed login attempts. Please wait 1 minute.");
+                throw new BadRequestException("Too many failed login attempts. Please wait 1 minute.");
             }
 
             // 3) Look up user
@@ -86,7 +87,7 @@ namespace BankApi.Services.Implementations
 
                 _logger.LogWarning("Invalid login — User not found. Email: {Email}, Attempts: {Attempts}", dto.Email, attempts);
 
-                throw new Exception("Invalid Email or password");
+                throw new BadRequestException("Invalid Email or password");
             }
 
             // 4) Verify password
@@ -97,7 +98,7 @@ namespace BankApi.Services.Implementations
 
                 _logger.LogWarning("Invalid login — Wrong password. Email: {Email}, Attempts: {Attempts}", dto.Email, attempts);
 
-                throw new Exception("Invalid Email or password");
+                throw new BadRequestException("Invalid Email or password");
             }
 
             // 5) Success → clear attempts

@@ -8,8 +8,8 @@ namespace BankApi.DTO
         public int AccountId { get; set; }
 
         [Required]
-        [Range(1, double.MaxValue, ErrorMessage = "Amount must be greater than zero.")]
-        public double Amount { get; set; }
+        [Range(typeof(decimal), "0.01", "79228162514264337593543950335", ErrorMessage = "Amount must be greater than zero.")]
+        public decimal Amount { get; set; }
     }
 
 }

@@ -1,6 +1,7 @@
-﻿using BankApi.Db;
-using Microsoft.EntityFrameworkCore;
+﻿using BankApi.Repositories.Interfaces;
+using System;
 using System.Security.Cryptography;
+using System.Threading.Tasks;
 
 namespace BankApi.Helpers
 {
@@ -16,8 +17,8 @@ namespace BankApi.Helpers
             return number.ToString("D10");
         }
 
-        // Generate a unique number by checking the database
-        public static async Task<string> GenerateUniqueAccountNumberAsync(AppDbContext context)
+        // Generate a unique number by checking the repository
+        public static async Task<string> GenerateUniqueAccountNumberAsync(IAccountRepository accountRepo)
         {
             string accountNumber;
             bool exists;
@@ -26,11 +27,11 @@ namespace BankApi.Helpers
             do
             {
                 accountNumber = GenerateRandom10DigitNumber();
-                exists = await context.Accounts.AnyAsync(a => a.AccountNumber == accountNumber);
+                exists = await accountRepo.AccountExistsAsync(accountNumber);
                 attempts++;
 
                 if (attempts > 10)
-                    throw new Exception("Unable to generate unique account number after multiple attempts.");
+                    throw new InvalidOperationException("Unable to generate unique account number after multiple attempts.");
             }
             while (exists);
 

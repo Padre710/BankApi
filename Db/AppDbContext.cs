@@ -23,6 +23,10 @@ namespace BankApi.Db
                 .Property(t => t.TransactionDirection)
                 .HasConversion<string>();
 
+            modelBuilder.Entity<Transaction>()
+                .Property(t => t.Amount)
+                .HasPrecision(18, 2);
+
             modelBuilder.Entity<Account>()
                 .Property(t => t.AccountType)
                 .HasConversion<string>();
@@ -30,6 +34,10 @@ namespace BankApi.Db
             modelBuilder.Entity<Account>()
                .Property(t => t.Currency)
                .HasConversion<string>();
+
+            modelBuilder.Entity<Account>()
+                .Property(a => a.Balance)
+                .HasPrecision(18, 2);
 
 
             modelBuilder.Entity<User>()

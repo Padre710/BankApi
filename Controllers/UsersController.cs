@@ -1,5 +1,5 @@
 ﻿using BankApi.Constants;
-using BankApi.Models;
+using BankApi.DTO;
 using BankApi.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -21,20 +21,20 @@ namespace BankApi.Controllers
         }
 
         [HttpGet]
-        [Authorize(Roles = Roles.Admin)]
+        [Authorize(Policy = Policies.AdminOnly)]
         public async Task<IActionResult> GetAllUsers()
         {            
-                var role = User.FindFirst(ClaimTypes.Role)?.Value;
-                var users = await _userService.GetAllUsersAsync(role!);
-                return Ok(users);  
+            var role = User.FindFirst(ClaimTypes.Role)?.Value;
+            var users = await _userService.GetAllUsersAsync(role!);
+            return Ok(users);  
         }
 
         [HttpGet("{id}")]
-        [Authorize(Roles = Roles.AllRoles)]
+        [Authorize]
         public async Task<IActionResult> GetUserById(int id)
         {
             var role = User.FindFirst(ClaimTypes.Role)?.Value;
-            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
 
             // If Customer → can only access their own user record
             if (role == Roles.Customer && userId != id)
@@ -50,27 +50,26 @@ namespace BankApi.Controllers
             return Ok(user);
         }
 
-
         [HttpPut("{id}")]
-        [Authorize(Roles = Roles.Admin)]
-        public async Task<IActionResult> UpdateUser(int id, [FromBody] User updatedUser)
+        [Authorize(Policy = Policies.AdminOnly)]
+        public async Task<IActionResult> UpdateUser(int id, [FromBody] UserUpdateDto updatedUser)
         {
-                var role = User.FindFirst(ClaimTypes.Role)?.Value;
-                var message = await _userService.UpdateUserAsync(id, updatedUser, role!);
-                return Ok(new { message });     
+            var role = User.FindFirst(ClaimTypes.Role)?.Value;
+            var message = await _userService.UpdateUserAsync(id, updatedUser, role!);
+            return Ok(new { message });     
         }
 
         [HttpDelete("{id}")]
-        [Authorize(Roles = Roles.Admin)]
+        [Authorize(Policy = Policies.AdminOnly)]
         public async Task<IActionResult> DeleteUser(int id)
         {   
-                var role = User.FindFirst(ClaimTypes.Role)?.Value;
-                var message = await _userService.DeleteUserAsync(id, role!);
-                return Ok(new { message });
+            var role = User.FindFirst(ClaimTypes.Role)?.Value;
+            var message = await _userService.DeleteUserAsync(id, role!);
+            return Ok(new { message });
         }
 
         [HttpGet("customers")]
-        [Authorize(Roles = Roles.AdminOrTeller)]
+        [Authorize(Policy = Policies.TellerOrAdmin)]
         public async Task<IActionResult> GetCustomers()
         {
             var customers = await _userService.GetCustomersAsync();
@@ -78,7 +77,7 @@ namespace BankApi.Controllers
         }
 
         [HttpGet("tellers")]
-        [Authorize(Roles = Roles.AdminOrTeller)]
+        [Authorize(Policy = Policies.TellerOrAdmin)]
         public async Task<IActionResult> GetTellers()
         {
             var tellers = await _userService.GetTellersAsync();

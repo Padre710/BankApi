@@ -12,5 +12,7 @@ namespace BankApi.Repositories.Interfaces
         Task DeleteUserAsync(User user);
         Task<IEnumerable<User>> GetCustomersAsync();
         Task<IEnumerable<User>> GetTellersAsync();
+        Task<User?> GetUserWithAccountsAsync(int userId);
+        Task<int> GetCountAsync();
     }
 }

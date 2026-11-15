@@ -1,9 +1,12 @@
 ﻿using BankApi.Constants;
+using BankApi.DTO;
+using BankApi.Exceptions;
 using BankApi.Models;
 using BankApi.Repositories.Interfaces;
 using BankApi.Services.Interfaces;
 using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace BankApi.Services.Implementations
@@ -19,7 +22,7 @@ namespace BankApi.Services.Implementations
             _logger = logger;
         }
 
-        public async Task<IEnumerable<User>> GetAllUsersAsync(string role)
+        public async Task<IEnumerable<UserReadDto>> GetAllUsersAsync(string role)
         {
             _logger.LogInformation("Request to fetch all users by role: {Role}", role);
 
@@ -32,24 +35,26 @@ namespace BankApi.Services.Implementations
             var users = await _userRepository.GetAllUsersAsync();
 
             _logger.LogInformation("Fetched {Count} users successfully.", users?.Count() ?? 0);
-            return users;
+            return users?.Select(MapToDto) ?? Enumerable.Empty<UserReadDto>();
         }
 
-        public async Task<User?> GetUserByIdAsync(int id)
+        public async Task<UserReadDto?> GetUserByIdAsync(int id)
         {
             _logger.LogInformation("Fetching user by ID: {Id}", id);
 
             var user = await _userRepository.GetUserByIdAsync(id);
 
             if (user == null)
+            {
                 _logger.LogWarning("User with ID {Id} not found.", id);
-            else
-                _logger.LogInformation("User with ID {Id} fetched successfully.", id);
+                return null;
+            }
 
-            return user;
+            _logger.LogInformation("User with ID {Id} fetched successfully.", id);
+            return MapToDto(user);
         }
 
-        public async Task<string> UpdateUserAsync(int id, User updatedUser, string role)
+        public async Task<string> UpdateUserAsync(int id, UserUpdateDto updatedUser, string role)
         {
             _logger.LogInformation("Attempting to update user ID {Id} by role {Role}", id, role);
 
@@ -63,7 +68,7 @@ namespace BankApi.Services.Implementations
             if (user == null)
             {
                 _logger.LogWarning("Update failed — User with ID {Id} not found.", id);
-                return $"User with ID {id} not found.";
+                throw new NotFoundException($"User with ID {id} not found.");
             }
 
             _logger.LogInformation("Updating user ID {Id}...", id);
@@ -93,7 +98,7 @@ namespace BankApi.Services.Implementations
             if (user == null)
             {
                 _logger.LogWarning("Delete failed — User with ID {Id} not found.", id);
-                return $"User with ID {id} not found.";
+                throw new NotFoundException($"User with ID {id} not found.");
             }
 
             await _userRepository.DeleteUserAsync(user);
@@ -102,20 +107,29 @@ namespace BankApi.Services.Implementations
             return "User deleted successfully.";
         }
 
-        public async Task<IEnumerable<User>> GetCustomersAsync()
+        public async Task<IEnumerable<UserReadDto>> GetCustomersAsync()
         {
             _logger.LogInformation("Fetching all customers...");
             var customers = await _userRepository.GetCustomersAsync();
             _logger.LogInformation("Fetched {Count} customers.", customers?.Count() ?? 0);
-            return customers;
+            return customers?.Select(MapToDto) ?? Enumerable.Empty<UserReadDto>();
         }
 
-        public async Task<IEnumerable<User>> GetTellersAsync()
+        public async Task<IEnumerable<UserReadDto>> GetTellersAsync()
         {
             _logger.LogInformation("Fetching all tellers...");
             var tellers = await _userRepository.GetTellersAsync();
             _logger.LogInformation("Fetched {Count} tellers.", tellers?.Count() ?? 0);
-            return tellers;
+            return tellers?.Select(MapToDto) ?? Enumerable.Empty<UserReadDto>();
         }
+
+        private static UserReadDto MapToDto(User user) => new UserReadDto
+        {
+            Id = user.Id,
+            FirstName = user.FirstName,
+            LastName = user.LastName,
+            Email = user.Email,
+            Role = user.Role
+        };
     }
 }

@@ -91,5 +91,19 @@ namespace BankApi.Repositories.Implementations
 
             return tellers;
         }
+
+        public async Task<User?> GetUserWithAccountsAsync(int userId)
+        {
+            _logger.LogInformation("Repository: Fetching user {UserId} with accounts", userId);
+            return await _context.Users
+                .Include(u => u.Accounts)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+        }
+
+        public async Task<int> GetCountAsync()
+        {
+            _logger.LogInformation("Repository: Getting total users count");
+            return await _context.Users.CountAsync();
+        }
     }
 }

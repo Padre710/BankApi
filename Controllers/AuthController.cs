@@ -21,36 +21,25 @@ namespace BankApi.Controllers
         public async Task<IActionResult> Register([FromBody] RegisterDto dto)
         {
             var result = await _authService.RegisterAsync(dto);
-
-            if (result == "Email already exists.")
-                return BadRequest(result);
-
             return Ok(new { message = result });
         }
 
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginDto dto)
         {
-            try
+            var (token, user) = await _authService.LoginAsync(dto);
+            return Ok(new
             {
-                var (token, user) = await _authService.LoginAsync(dto);
-                return Ok(new
+                message = "Login successful",
+                token,
+                user = new
                 {
-                    message = "Login successful",
-                    token,
-                    user = new
-                    {
-                        user.Id,
-                        user.FirstName,
-                        user.Email,
-                        Role = user.Role.ToString()
-                    }
-                });
-            }
-            catch (System.Exception ex)
-            {
-                return BadRequest(ex.Message);
-            }
+                    user.Id,
+                    user.FirstName,
+                    user.Email,
+                    Role = user.Role.ToString()
+                }
+            });
         }
 
         [HttpGet("profile")]

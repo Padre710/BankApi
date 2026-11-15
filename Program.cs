@@ -1,5 +1,7 @@
-﻿using BankApi.Db;
+﻿using BankApi.Constants;
+using BankApi.Db;
 using BankApi.Helpers;
+using BankApi.Middleware;
 using BankApi.Repositories.Implementations;
 using BankApi.Repositories.Interfaces;
 using BankApi.Services;
@@ -98,9 +100,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
-    options.AddPolicy("CustomerOnly", policy => policy.RequireRole("Customer"));
-    options.AddPolicy("TellerOrAdmin", policy => policy.RequireRole("Teller", "Admin"));
+    options.AddPolicy(Policies.AdminOnly, policy => policy.RequireRole(Roles.Admin));
+    options.AddPolicy(Policies.CustomerOnly, policy => policy.RequireRole(Roles.Customer));
+    options.AddPolicy(Policies.TellerOrAdmin, policy => policy.RequireRole(Roles.Teller, Roles.Admin));
 });
 
 builder.Services.AddScoped<JwtHelper>();
@@ -112,6 +114,7 @@ builder.Services.AddScoped<IAccountRepository, AccountRepository>();
 builder.Services.AddScoped<IAccountService, AccountService>();
 builder.Services.AddScoped<ITransactionRepository, TransactionRepository>();
 builder.Services.AddScoped<ITransactionService, TransactionService>();
+builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddSingleton<RedisCacheService>();
 
 builder.Services.AddCors(options =>
@@ -133,6 +136,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 // ✅ Make sure authentication comes before authorization
 app.UseSerilogRequestLogging();

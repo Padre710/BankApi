@@ -14,6 +14,8 @@ namespace BankApi.Repositories.Interfaces
         Task DeleteAsync(Account account);
         Task<bool> AccountExistsAsync(string accountNumber);
         Task<IEnumerable<Account>> SearchByAccountNumberAsync(string accountNumber);
+        Task<int> GetCountAsync();
+        Task<decimal> GetTotalBalanceAsync();
         Task SaveChangesAsync();
     }
 }

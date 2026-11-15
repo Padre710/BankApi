@@ -117,6 +117,39 @@ namespace BankApi.Repositories.Implementations
                 .ToListAsync();
         }
 
+        public async Task<int> GetCountAsync()
+        {
+            _logger.LogInformation("Fetching total transactions count");
+            return await _context.Transactions.CountAsync();
+        }
+
+        public async Task<List<Transaction>> GetTransferCounterpartsAsync(List<Guid> transferIds, int excludeAccountId)
+        {
+            _logger.LogInformation("Fetching transfer counterpart transactions for {Count} transfer IDs", transferIds.Count);
+            return await _context.Transactions
+                .Where(t => t.TransferId.HasValue && transferIds.Contains(t.TransferId.Value) && t.AccountId != excludeAccountId)
+                .Include(t => t.Account)
+                .ToListAsync();
+        }
+
+        public async Task ExecuteInTransactionAsync(Func<Task> action)
+        {
+            _logger.LogInformation("Repository: Starting database transaction");
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                await action();
+                await transaction.CommitAsync();
+                _logger.LogInformation("Repository: Database transaction committed successfully");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Repository: Database transaction failed, rolling back");
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
+
         public async Task Save()
         {
             _logger.LogInformation("Saving changes to database");

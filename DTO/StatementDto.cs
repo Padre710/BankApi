@@ -5,8 +5,8 @@
         public DateTime Date { get; set; }
         public string Type { get; set; } = string.Empty;
         public string Direction { get; set; } = string.Empty;
-        public double Amount { get; set; }
-        public double BalanceAfter { get; set; }
+        public decimal Amount { get; set; }
+        public decimal BalanceAfter { get; set; }
         public Guid? TransferId { get; set; }
         public string Description { get; set; } = string.Empty;
     }
@@ -21,10 +21,10 @@
         public int Month { get; set; }
         public DateTime PeriodStart { get; set; }
         public DateTime PeriodEnd { get; set; }
-        public double OpeningBalance { get; set; }
-        public double TotalCredits { get; set; }
-        public double TotalDebits { get; set; }
-        public double ClosingBalance { get; set; }
+        public decimal OpeningBalance { get; set; }
+        public decimal TotalCredits { get; set; }
+        public decimal TotalDebits { get; set; }
+        public decimal ClosingBalance { get; set; }
         public int TransactionCount { get; set; }
         public List<StatementLineDto> Lines { get; set; } = new();
     }

@@ -22,7 +22,7 @@ namespace BankApi.Models
         public Account Account { get; set; }
         public TransactionType TransactionType { get; set; } 
         public TransactionDirection TransactionDirection { get; set; }
-        public double Amount { get; set; }
+        public decimal Amount { get; set; }
         public DateTime timestamp { get; set; } = DateTime.Now;
         public Guid? TransferId { get; set; }
     }

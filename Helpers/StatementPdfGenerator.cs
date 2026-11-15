@@ -133,7 +133,7 @@ namespace BankApi.Helpers
         private static IContainer BodyCell(IContainer container) =>
             container.BorderBottom(1).BorderColor(Colors.Grey.Lighten2).Padding(4);
 
-        private static string Money(double value) =>
+        private static string Money(decimal value) =>
             value.ToString("N2", CultureInfo.InvariantCulture);
 
         private static string Ref(Guid? id) =>

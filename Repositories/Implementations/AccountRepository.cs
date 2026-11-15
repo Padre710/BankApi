@@ -69,6 +69,18 @@ namespace BankApi.Repositories.Implementations
                 .ToListAsync();
         }
 
+        public async Task<int> GetCountAsync()
+        {
+            _logger.LogInformation("Repository: Getting total accounts count");
+            return await _context.Accounts.CountAsync();
+        }
+
+        public async Task<decimal> GetTotalBalanceAsync()
+        {
+            _logger.LogInformation("Repository: Getting total balance across all accounts");
+            return await _context.Accounts.SumAsync(a => a.Balance);
+        }
+
         public async Task SaveChangesAsync()
         {
             _logger.LogInformation("Repository: Saving changes to database");

@@ -1,12 +1,10 @@
 ﻿using BankApi.Constants;
-using BankApi.Db;
 using BankApi.DTO;
-using BankApi.Models;
 using BankApi.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
+using System.Threading.Tasks;
 
 namespace BankApi.Controllers
 {
@@ -15,16 +13,17 @@ namespace BankApi.Controllers
     public class AccountsController : ControllerBase
     {
         private readonly IAccountService _accountService;
-        private readonly AppDbContext _context;
 
-        public AccountsController(IAccountService accountService, AppDbContext context)
+        public AccountsController(IAccountService accountService)
         {
             _accountService = accountService;
-            _context = context;
         }
 
+        private int CurrentUserId => int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+        private string Role => User.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
+
         [HttpGet]
-        [Authorize(Roles = Roles.AdminOrTeller)]
+        [Authorize(Policy = Policies.TellerOrAdmin)]
         public async Task<IActionResult> GetAll()
         {
             var accounts = await _accountService.GetAllAccountsAsync();
@@ -32,26 +31,10 @@ namespace BankApi.Controllers
         }
 
         [HttpGet("{id}")]
-        [Authorize(Roles = Roles.AllRoles)]
+        [Authorize]
         public async Task<IActionResult> GetById(int id)
         {
-            var role = User.FindFirst(ClaimTypes.Role)?.Value;
-            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-
-            // If Customer → verify they own the account
-            if (role == Roles.Customer)
-            {
-                var accountCheck = await _context.Accounts
-                    .Where(a => a.Id == id)
-                    .Select(a => new { a.UserId })
-                    .FirstOrDefaultAsync();
-
-                if (accountCheck == null || accountCheck.UserId != userId)
-                    return NotFound(); // hides existence
-            }
-
-            // Admin/Teller or verified Customer
-            var account = await _accountService.GetAccountByIdAsync(id);
+            var account = await _accountService.GetAccountByIdAsync(id, CurrentUserId, Role);
             if (account == null)
                 return NotFound();
 
@@ -59,27 +42,10 @@ namespace BankApi.Controllers
         }
 
         [HttpGet("{id}/balance")]
-        [Authorize(Roles = Roles.AllRoles)]
+        [Authorize]
         public async Task<IActionResult> GetBalanceById(int id)
         {
-            var role = User.FindFirst(ClaimTypes.Role)?.Value;
-            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-
-            // If the caller is a Customer → verify this account belongs to them
-            if (role == Roles.Customer)
-            {
-                var account = await _context.Accounts
-                    .Where(a => a.Id == id)
-                    .Select(a => new { a.UserId })
-                    .FirstOrDefaultAsync();
-
-                if (account == null || account.UserId != userId)
-                    return NotFound(); // Hide account existence for security
-            }
-
-            // Admin / Teller OR verified customer
-            var balance = await _accountService.GetBalanceByIdAsync(id);
-
+            var balance = await _accountService.GetBalanceByIdAsync(id, CurrentUserId, Role);
             if (balance == null)
                 return NotFound();
 
@@ -97,18 +63,15 @@ namespace BankApi.Controllers
 
             var userId = int.Parse(userIdClaim);
 
-            var newAccount = await _accountService.CreateAccountAsync(userId,name, dto);
+            var newAccount = await _accountService.CreateAccountAsync(userId, name, dto);
             return CreatedAtAction(nameof(GetById), new { id = newAccount.Id }, newAccount);
         }
 
         [HttpGet("by-user/{userId}")]
-        [Authorize(Roles = Roles.AllRoles)]
+        [Authorize]
         public async Task<IActionResult> GetAccountsByUser(int userId)
         {
-            var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
-            var Id = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier).Value);
-
-            if (userRole == Roles.Customer && Id != userId)
+            if (Role == Roles.Customer && CurrentUserId != userId)
                 return Forbid();
 
             var result = await _accountService.GetAccountsByUserAsync(userId);
@@ -116,7 +79,7 @@ namespace BankApi.Controllers
         }
 
         [HttpPut]
-        [Authorize(Roles = Roles.Admin)]
+        [Authorize(Policy = Policies.AdminOnly)]
         public async Task<IActionResult> Update([FromBody] AccountUpdateDto dto)
         {
             await _accountService.UpdateAccountAsync(dto);
@@ -124,7 +87,7 @@ namespace BankApi.Controllers
         }
 
         [HttpDelete("{id}")]
-        [Authorize(Roles = Roles.Admin)]
+        [Authorize(Policy = Policies.AdminOnly)]
         public async Task<IActionResult> Delete(int id)
         {
             await _accountService.DeleteAccountAsync(id);
@@ -132,7 +95,7 @@ namespace BankApi.Controllers
         }
 
         [HttpGet("search")]
-        [Authorize(Roles = Roles.AdminOrTeller)]
+        [Authorize(Policy = Policies.TellerOrAdmin)]
         public async Task<IActionResult> SearchAccount([FromQuery] string accountNumber)
         {
             var result = await _accountService.SearchAccountAsync(accountNumber);

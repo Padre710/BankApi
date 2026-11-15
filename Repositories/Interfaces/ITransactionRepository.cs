@@ -13,6 +13,9 @@ namespace BankApi.Repositories.Interfaces
         Task AddTransactions(List<Transaction> transactions);
         Task<List<Transaction>> FilterTransactions(TransactionType? type, TransactionDirection? direction,
             DateTime? dateFrom, DateTime? dateTo);
+        Task<int> GetCountAsync();
+        Task<List<Transaction>> GetTransferCounterpartsAsync(List<Guid> transferIds, int excludeAccountId);
+        Task ExecuteInTransactionAsync(Func<Task> action);
         Task Save();
     }
 }

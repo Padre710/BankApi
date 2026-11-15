@@ -1,54 +1,58 @@
 ﻿using BankApi.Constants;
-using BankApi.Db;
 using BankApi.DTO;
+using BankApi.Exceptions;
 using BankApi.Helpers;
 using BankApi.Models;
 using BankApi.Repositories.Interfaces;
 using BankApi.Services.Interfaces;
-using Microsoft.EntityFrameworkCore;
-using Serilog;
+using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace BankApi.Services.Implementations
 {
     public class TransactionService : ITransactionService
     {
-        private readonly ITransactionRepository _repo;
-        private readonly AppDbContext _context;
+        private readonly ITransactionRepository _transactionRepo;
+        private readonly IAccountRepository _accountRepo;
+        private readonly ILogger<TransactionService> _logger;
 
-        public TransactionService(ITransactionRepository repo, AppDbContext context)
+        public TransactionService(
+            ITransactionRepository transactionRepo,
+            IAccountRepository accountRepo,
+            ILogger<TransactionService> logger)
         {
-            _repo = repo;
-            _context = context;
+            _transactionRepo = transactionRepo;
+            _accountRepo = accountRepo;
+            _logger = logger;
         }
 
         public async Task<List<TransactionReadDto>> GetByAccountId(int accountId, int userId, string role)
         {
             try
             {
-                Log.Information("GetByAccountId called for Account {AccountId} by User {UserId} with Role {Role}", accountId, userId, role);
+                _logger.LogInformation("GetByAccountId called for Account {AccountId} by User {UserId} with Role {Role}", accountId, userId, role);
 
                 if (role == Roles.Customer)
                 {
-                    var owner = await _context.Accounts
-                        .Where(a => a.Id == accountId)
-                        .Select(a => a.UserId)
-                        .FirstOrDefaultAsync();
-
-                    if (owner != userId)
+                    var account = await _accountRepo.GetByIdAsync(accountId);
+                    if (account == null || account.UserId != userId)
                     {
-                        Log.Warning("Unauthorized access attempt to Account {AccountId} by User {UserId}", accountId, userId);
-                        throw new Exception("Account not found.");
+                        _logger.LogWarning("Unauthorized access attempt to Account {AccountId} by User {UserId}", accountId, userId);
+                        throw new NotFoundException("Account not found.");
                     }
                 }
 
-                var transactions = (await _repo.GetByAccountId(accountId)).Select(MapToDto).ToList();
+                var transactions = (await _transactionRepo.GetByAccountId(accountId)).Select(MapToDto).ToList();
 
-                Log.Information("{Count} transactions returned for Account {AccountId}", transactions.Count, accountId);
+                _logger.LogInformation("{Count} transactions returned for Account {AccountId}", transactions.Count, accountId);
                 return transactions;
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error fetching transactions for Account {AccountId}", accountId);
+                _logger.LogError(ex, "Error fetching transactions for Account {AccountId}", accountId);
                 throw;
             }
         }
@@ -57,14 +61,14 @@ namespace BankApi.Services.Implementations
         {
             try
             {
-                Log.Information("Fetching all transactions");
-                var transactions = (await _repo.GetAll()).Select(MapToDto).ToList();
-                Log.Information("{Count} transactions returned", transactions.Count);
+                _logger.LogInformation("Fetching all transactions");
+                var transactions = (await _transactionRepo.GetAll()).Select(MapToDto).ToList();
+                _logger.LogInformation("{Count} transactions returned", transactions.Count);
                 return transactions;
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error fetching all transactions");
+                _logger.LogError(ex, "Error fetching all transactions");
                 throw;
             }
         }
@@ -73,38 +77,31 @@ namespace BankApi.Services.Implementations
         {
             try
             {
-                Log.Information("GetByTransactionId called for Transaction {TransactionId} by User {UserId} with Role {Role}", id, userId, role);
+                _logger.LogInformation("GetByTransactionId called for Transaction {TransactionId} by User {UserId} with Role {Role}", id, userId, role);
+
+                var single = await _transactionRepo.GetByTransactionId(id);
+                if (single == null)
+                {
+                    _logger.LogWarning("Transaction {TransactionId} not found", id);
+                    throw new NotFoundException("Transaction not found.");
+                }
 
                 if (role == Roles.Customer)
                 {
-                    var check = await _context.Transactions
-                        .Where(t => t.Id == id)
-                        .Join(_context.Accounts,
-                            t => t.AccountId,
-                            a => a.Id,
-                            (t, a) => new { t.Id, a.UserId })
-                        .FirstOrDefaultAsync();
-
-                    if (check == null || check.UserId != userId)
+                    var account = await _accountRepo.GetByIdAsync(single.AccountId);
+                    if (account == null || account.UserId != userId)
                     {
-                        Log.Warning("Unauthorized access attempt for Transaction {TransactionId} by User {UserId}", id, userId);
-                        throw new Exception("Transaction not found.");
+                        _logger.LogWarning("Unauthorized access attempt for Transaction {TransactionId} by User {UserId}", id, userId);
+                        throw new NotFoundException("Transaction not found.");
                     }
                 }
 
-                var single = await _repo.GetByTransactionId(id);
-                if (single == null)
-                {
-                    Log.Warning("Transaction {TransactionId} not found", id);
-                    throw new Exception("Transaction not found.");
-                }
-
-                Log.Information("Transaction {TransactionId} returned successfully", id);
+                _logger.LogInformation("Transaction {TransactionId} returned successfully", id);
                 return new List<TransactionReadDto> { MapToDto(single) };
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error fetching Transaction {TransactionId}", id);
+                _logger.LogError(ex, "Error fetching Transaction {TransactionId}", id);
                 throw;
             }
         }
@@ -113,14 +110,14 @@ namespace BankApi.Services.Implementations
         {
             try
             {
-                Log.Information("GetByTransferId called for Transfer {TransferId}", transferId);
-                var transactions = (await _repo.GetByTransferId(transferId)).Select(MapToDto).ToList();
-                Log.Information("{Count} transactions returned for Transfer {TransferId}", transactions.Count, transferId);
+                _logger.LogInformation("GetByTransferId called for Transfer {TransferId}", transferId);
+                var transactions = (await _transactionRepo.GetByTransferId(transferId)).Select(MapToDto).ToList();
+                _logger.LogInformation("{Count} transactions returned for Transfer {TransferId}", transactions.Count, transferId);
                 return transactions;
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error fetching Transfer {TransferId}", transferId);
+                _logger.LogError(ex, "Error fetching Transfer {TransferId}", transferId);
                 throw;
             }
         }
@@ -129,21 +126,21 @@ namespace BankApi.Services.Implementations
         {
             try
             {
-                Log.Information("GetByUserId called for User {UserId} by User {CurrentUserId} with Role {Role}", userId, currentUserId, role);
+                _logger.LogInformation("GetByUserId called for User {UserId} by User {CurrentUserId} with Role {Role}", userId, currentUserId, role);
 
                 if (role == Roles.Customer && currentUserId != userId)
                 {
-                    Log.Warning("Unauthorized access attempt by User {CurrentUserId} to User {UserId}'s transactions", currentUserId, userId);
-                    throw new Exception("Unauthorized.");
+                    _logger.LogWarning("Unauthorized access attempt by User {CurrentUserId} to User {UserId}'s transactions", currentUserId, userId);
+                    throw new ForbiddenException("Unauthorized.");
                 }
 
-                var transactions = (await _repo.GetByUserId(userId)).Select(MapToDto).ToList();
-                Log.Information("{Count} transactions returned for User {UserId}", transactions.Count, userId);
+                var transactions = (await _transactionRepo.GetByUserId(userId)).Select(MapToDto).ToList();
+                _logger.LogInformation("{Count} transactions returned for User {UserId}", transactions.Count, userId);
                 return transactions;
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error fetching transactions for User {UserId}", userId);
+                _logger.LogError(ex, "Error fetching transactions for User {UserId}", userId);
                 throw;
             }
         }
@@ -152,10 +149,10 @@ namespace BankApi.Services.Implementations
         {
             try
             {
-                Log.Information("Deposit called for Account {AccountId}, Amount {Amount}", dto.AccountId, dto.Amount);
+                _logger.LogInformation("Deposit called for Account {AccountId}, Amount {Amount}", dto.AccountId, dto.Amount);
 
-                var account = await _context.Accounts.FindAsync(dto.AccountId)
-                    ?? throw new Exception($"Account {dto.AccountId} not found.");
+                var account = await _accountRepo.GetByIdAsync(dto.AccountId)
+                    ?? throw new NotFoundException($"Account {dto.AccountId} not found.");
 
                 account.Balance += dto.Amount;
 
@@ -167,10 +164,14 @@ namespace BankApi.Services.Implementations
                     TransactionDirection = TransactionDirection.Credit
                 };
 
-                await _repo.AddTransaction(txn);
-                await _repo.Save();
+                await _transactionRepo.ExecuteInTransactionAsync(async () =>
+                {
+                    await _accountRepo.UpdateAsync(account);
+                    await _transactionRepo.AddTransaction(txn);
+                    await _transactionRepo.Save();
+                });
 
-                Log.Information("Deposit successful for Account {AccountId}, Amount {Amount}", dto.AccountId, dto.Amount);
+                _logger.LogInformation("Deposit successful for Account {AccountId}, Amount {Amount}", dto.AccountId, dto.Amount);
 
                 return new TransactionResponseDto
                 {
@@ -183,7 +184,7 @@ namespace BankApi.Services.Implementations
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Deposit failed for Account {AccountId}, Amount {Amount}", dto.AccountId, dto.Amount);
+                _logger.LogError(ex, "Deposit failed for Account {AccountId}, Amount {Amount}", dto.AccountId, dto.Amount);
                 throw;
             }
         }
@@ -192,15 +193,15 @@ namespace BankApi.Services.Implementations
         {
             try
             {
-                Log.Information("Withdraw called for Account {AccountId}, Amount {Amount}", dto.AccountId, dto.Amount);
+                _logger.LogInformation("Withdraw called for Account {AccountId}, Amount {Amount}", dto.AccountId, dto.Amount);
 
-                var account = await _context.Accounts.FindAsync(dto.AccountId)
-                    ?? throw new Exception($"Account {dto.AccountId} not found.");
+                var account = await _accountRepo.GetByIdAsync(dto.AccountId)
+                    ?? throw new NotFoundException($"Account {dto.AccountId} not found.");
 
                 if (dto.Amount > account.Balance)
                 {
-                    Log.Warning("Insufficient balance for Withdraw: Account {AccountId}, Amount {Amount}, Balance {Balance}", dto.AccountId, dto.Amount, account.Balance);
-                    throw new Exception("Insufficient Balance");
+                    _logger.LogWarning("Insufficient balance for Withdraw: Account {AccountId}, Amount {Amount}, Balance {Balance}", dto.AccountId, dto.Amount, account.Balance);
+                    throw new InsufficientBalanceException("Insufficient Balance");
                 }
 
                 account.Balance -= dto.Amount;
@@ -213,10 +214,14 @@ namespace BankApi.Services.Implementations
                     TransactionDirection = TransactionDirection.Debit
                 };
 
-                await _repo.AddTransaction(txn);
-                await _repo.Save();
+                await _transactionRepo.ExecuteInTransactionAsync(async () =>
+                {
+                    await _accountRepo.UpdateAsync(account);
+                    await _transactionRepo.AddTransaction(txn);
+                    await _transactionRepo.Save();
+                });
 
-                Log.Information("Withdrawal successful for Account {AccountId}, Amount {Amount}", dto.AccountId, dto.Amount);
+                _logger.LogInformation("Withdrawal successful for Account {AccountId}, Amount {Amount}", dto.AccountId, dto.Amount);
 
                 return new TransactionResponseDto
                 {
@@ -229,7 +234,7 @@ namespace BankApi.Services.Implementations
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Withdrawal failed for Account {AccountId}, Amount {Amount}", dto.AccountId, dto.Amount);
+                _logger.LogError(ex, "Withdrawal failed for Account {AccountId}, Amount {Amount}", dto.AccountId, dto.Amount);
                 throw;
             }
         }
@@ -238,44 +243,36 @@ namespace BankApi.Services.Implementations
         {
             try
             {
-                Log.Information("Transfer called: From {FromAccountId} To {ToAccountId}, Amount {Amount}, User {UserId}, Role {Role}", dto.FromAccountId, dto.ToAccountId, dto.Amount, userId, role);
+                _logger.LogInformation("Transfer called: From {FromAccountId} To {ToAccountId}, Amount {Amount}, User {UserId}, Role {Role}", dto.FromAccountId, dto.ToAccountId, dto.Amount, userId, role);
 
                 if (dto.FromAccountId == dto.ToAccountId)
                 {
-                    Log.Warning("Transfer rejected: same account {AccountId} on both sides", dto.FromAccountId);
-                    throw new Exception("Cannot transfer to the same account.");
+                    _logger.LogWarning("Transfer rejected: same account {AccountId} on both sides", dto.FromAccountId);
+                    throw new BadRequestException("Cannot transfer to the same account.");
                 }
 
-                if (role == Roles.Customer)
-                {
-                    var owner = await _context.Accounts
-                        .Where(a => a.Id == dto.FromAccountId)
-                        .Select(a => a.UserId)
-                        .FirstOrDefaultAsync();
-
-                    if (owner != userId)
-                    {
-                        Log.Warning("Unauthorized transfer attempt by User {UserId}", userId);
-                        throw new Exception("Unauthorized transfer.");
-                    }
-                }
-
-                var from = await _context.Accounts.FindAsync(dto.FromAccountId);
-                var to = await _context.Accounts.FindAsync(dto.ToAccountId);
+                var from = await _accountRepo.GetByIdAsync(dto.FromAccountId);
+                var to = await _accountRepo.GetByIdAsync(dto.ToAccountId);
 
                 if (from == null || to == null)
                 {
-                    Log.Warning("Transfer failed. Account(s) not found. From {FromAccountId}, To {ToAccountId}", dto.FromAccountId, dto.ToAccountId);
-                    throw new Exception("Account(s) not found.");
+                    _logger.LogWarning("Transfer failed. Account(s) not found. From {FromAccountId}, To {ToAccountId}", dto.FromAccountId, dto.ToAccountId);
+                    throw new NotFoundException("Account(s) not found.");
+                }
+
+                if (role == Roles.Customer && from.UserId != userId)
+                {
+                    _logger.LogWarning("Unauthorized transfer attempt by User {UserId}", userId);
+                    throw new ForbiddenException("Unauthorized transfer.");
                 }
 
                 if (from.Currency != to.Currency)
-                    throw new Exception("Currencies must match.");
+                    throw new BadRequestException("Currencies must match.");
 
                 if (dto.Amount > from.Balance)
                 {
-                    Log.Warning("Insufficient balance for Transfer. From {FromAccountId}, Amount {Amount}, Balance {Balance}", dto.FromAccountId, dto.Amount, from.Balance);
-                    throw new Exception("Insufficient balance");
+                    _logger.LogWarning("Insufficient balance for Transfer. From {FromAccountId}, Amount {Amount}, Balance {Balance}", dto.FromAccountId, dto.Amount, from.Balance);
+                    throw new InsufficientBalanceException("Insufficient balance.");
                 }
 
                 var transferId = Guid.NewGuid();
@@ -301,10 +298,15 @@ namespace BankApi.Services.Implementations
                     TransferId = transferId
                 };
 
-                await _repo.AddTransactions(new List<Transaction> { debit, credit });
-                await _repo.Save();
+                await _transactionRepo.ExecuteInTransactionAsync(async () =>
+                {
+                    await _accountRepo.UpdateAsync(from);
+                    await _accountRepo.UpdateAsync(to);
+                    await _transactionRepo.AddTransactions(new List<Transaction> { debit, credit });
+                    await _transactionRepo.Save();
+                });
 
-                Log.Information("Transfer successful: {Amount} from Account {FromAccountId} to {ToAccountId}", dto.Amount, dto.FromAccountId, dto.ToAccountId);
+                _logger.LogInformation("Transfer successful: {Amount} from Account {FromAccountId} to {ToAccountId}", dto.Amount, dto.FromAccountId, dto.ToAccountId);
 
                 return new TransactionResponseDto
                 {
@@ -317,7 +319,7 @@ namespace BankApi.Services.Implementations
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Transfer failed: From {FromAccountId} To {ToAccountId}, Amount {Amount}", dto.FromAccountId, dto.ToAccountId, dto.Amount);
+                _logger.LogError(ex, "Transfer failed: From {FromAccountId} To {ToAccountId}, Amount {Amount}", dto.FromAccountId, dto.ToAccountId, dto.Amount);
                 throw;
             }
         }
@@ -327,24 +329,25 @@ namespace BankApi.Services.Implementations
         {
             try
             {
-                Log.Information("FilterTransactions called: Type {Type}, Direction {Direction}, From {From}, To {To}", type, direction, from, to);
+                _logger.LogInformation("FilterTransactions called: Type {Type}, Direction {Direction}, From {From}, To {To}", type, direction, from, to);
 
-                var transactions = (await _repo.FilterTransactions(type, direction, from, to)).Select(MapToDto).ToList();
+                var transactions = (await _transactionRepo.FilterTransactions(type, direction, from, to)).Select(MapToDto).ToList();
 
-                Log.Information("{Count} transactions returned from filter", transactions.Count);
+                _logger.LogInformation("{Count} transactions returned from filter", transactions.Count);
                 return transactions;
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "FilterTransactions failed");
+                _logger.LogError(ex, "FilterTransactions failed");
                 throw;
             }
         }
+
         public async Task<StatementDto> GetMonthlyStatement(int accountId, int year, int month, int userId, string role)
         {
             try
             {
-                Log.Information("GetMonthlyStatement called for Account {AccountId}, {Year}-{Month}, User {UserId}, Role {Role}", accountId, year, month, userId, role);
+                _logger.LogInformation("GetMonthlyStatement called for Account {AccountId}, {Year}-{Month}, User {UserId}, Role {Role}", accountId, year, month, userId, role);
 
                 if (year < 2000 || year > DateTime.Now.Year)
                     throw new ArgumentException("Year is out of range.");
@@ -358,15 +361,15 @@ namespace BankApi.Services.Implementations
                 if (periodStart > DateTime.Now)
                     throw new ArgumentException("Cannot generate a statement for a future month.");
 
-                var account = await _context.Accounts.FindAsync(accountId);
+                var account = await _accountRepo.GetByIdAsync(accountId);
 
                 if (account == null || (role == Roles.Customer && account.UserId != userId))
                 {
-                    Log.Warning("Statement denied or account missing: Account {AccountId}, User {UserId}", accountId, userId);
-                    throw new KeyNotFoundException("Account not found.");
+                    _logger.LogWarning("Statement denied or account missing: Account {AccountId}, User {UserId}", accountId, userId);
+                    throw new NotFoundException("Account not found.");
                 }
 
-                var all = (await _repo.GetByAccountId(accountId))
+                var all = (await _transactionRepo.GetByAccountId(accountId))
                     .OrderBy(t => t.timestamp)
                     .ThenBy(t => t.Id)
                     .ToList();
@@ -378,16 +381,14 @@ namespace BankApi.Services.Implementations
                 var inPeriod = all
                     .Where(t => t.timestamp >= periodStart && t.timestamp < periodEndExclusive)
                     .ToList();
-                var transferIds = inPeriod
-    .Where(t => t.TransferId.HasValue)
-    .Select(t => t.TransferId!.Value)
-    .Distinct()
-    .ToList();
 
-                var otherLegs = await _context.Transactions
-                    .Where(t => t.TransferId.HasValue && transferIds.Contains(t.TransferId.Value) && t.AccountId != accountId)
-                    .Include(t => t.Account)
-                    .ToListAsync();
+                var transferIds = inPeriod
+                    .Where(t => t.TransferId.HasValue)
+                    .Select(t => t.TransferId!.Value)
+                    .Distinct()
+                    .ToList();
+
+                var otherLegs = await _transactionRepo.GetTransferCounterpartsAsync(transferIds, accountId);
                 var closing = account.Balance - afterPeriod;
                 var opening = closing - inPeriod.Sum(t => Signed(t));
 
@@ -426,12 +427,12 @@ namespace BankApi.Services.Implementations
                     Lines = lines
                 };
 
-                Log.Information("Statement built for Account {AccountId}, {Year}-{Month}: {Count} transactions", accountId, year, month, lines.Count);
+                _logger.LogInformation("Statement built for Account {AccountId}, {Year}-{Month}: {Count} transactions", accountId, year, month, lines.Count);
                 return statement;
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error building statement for Account {AccountId}, {Year}-{Month}", accountId, year, month);
+                _logger.LogError(ex, "Error building statement for Account {AccountId}, {Year}-{Month}", accountId, year, month);
                 throw;
             }
         }
@@ -442,7 +443,7 @@ namespace BankApi.Services.Implementations
             return StatementPdfGenerator.Generate(statement);
         }
 
-        private static double Signed(Transaction t) =>
+        private static decimal Signed(Transaction t) =>
             t.TransactionDirection == TransactionDirection.Credit ? t.Amount : -t.Amount;
 
         private static string Describe(Transaction t, List<Transaction> otherLegs)
@@ -462,6 +463,7 @@ namespace BankApi.Services.Implementations
 
         private static string LastFour(string number) =>
             number.Length <= 4 ? number : number.Substring(number.Length - 4);
+
         private static TransactionReadDto MapToDto(Transaction t) =>
             new TransactionReadDto
             {

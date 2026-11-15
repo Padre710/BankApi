@@ -8,7 +8,7 @@ namespace BankApi.DTO
         public int Id { get; set; }
         public int AccountId { get; set; }
         public TransactionType TransactionType { get; set; } 
-        public double Amount { get; set; }
+        public decimal Amount { get; set; }
         public TransactionDirection TransactionDirection { get; set; } 
         [JsonIgnore]
         public DateTime Timestamp { get; set; } 

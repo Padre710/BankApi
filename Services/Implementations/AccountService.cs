@@ -1,24 +1,31 @@
-﻿using BankApi.Db;
+﻿using BankApi.Constants;
 using BankApi.DTO;
+using BankApi.Exceptions;
 using BankApi.Helpers;
 using BankApi.Models;
 using BankApi.Repositories.Interfaces;
 using BankApi.Services.Interfaces;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace BankApi.Services.Implementations
 {
     public class AccountService : IAccountService
     {
         private readonly IAccountRepository _accountRepo;
-        private readonly AppDbContext _context;
+        private readonly IUserRepository _userRepo;
         private readonly ILogger<AccountService> _logger;
 
-        public AccountService(IAccountRepository accountRepo, AppDbContext context, ILogger<AccountService> logger)
+        public AccountService(
+            IAccountRepository accountRepo,
+            IUserRepository userRepo,
+            ILogger<AccountService> logger)
         {
             _accountRepo = accountRepo;
-            _context = context;
+            _userRepo = userRepo;
             _logger = logger;
         }
 
@@ -36,6 +43,7 @@ namespace BankApi.Services.Implementations
                 {
                     Id = a.Id,
                     AccountNumber = a.AccountNumber,
+                    AccountName = a.AccountName,
                     Balance = a.Balance,
                     AccountType = a.AccountType.ToString(),
                     Currency = a.Currency.ToString()
@@ -48,9 +56,9 @@ namespace BankApi.Services.Implementations
             }
         }
 
-        public async Task<AccountReadDto?> GetAccountByIdAsync(int id)
+        public async Task<AccountReadDto?> GetAccountByIdAsync(int id, int currentUserId, string role)
         {
-         try 
+            try 
             {
                 _logger.LogInformation("Fetching account by ID {Id}", id);
 
@@ -62,12 +70,20 @@ namespace BankApi.Services.Implementations
                     return null;
                 }
 
+                // If customer -> hide existence if not the owner
+                if (role == Roles.Customer && account.UserId != currentUserId)
+                {
+                    _logger.LogWarning("Customer {UserId} denied access to Account {AccountId}", currentUserId, id);
+                    return null;
+                }
+
                 _logger.LogInformation("Account with ID {Id} retrieved.", id);
 
                 return new AccountReadDto
                 {
                     Id = account.Id,
                     AccountNumber = account.AccountNumber,
+                    AccountName = account.AccountName,
                     Balance = account.Balance,
                     AccountType = account.AccountType.ToString(),
                     Currency = account.Currency.ToString()
@@ -80,7 +96,7 @@ namespace BankApi.Services.Implementations
             }
         }
 
-        public async Task<double?> GetBalanceByIdAsync(int id)
+        public async Task<decimal?> GetBalanceByIdAsync(int id, int currentUserId, string role)
         {
             try
             {
@@ -90,6 +106,12 @@ namespace BankApi.Services.Implementations
                 if (account == null)
                 {
                     _logger.LogWarning("Account ID {Id} not found when checking balance", id);
+                    return null;
+                }
+
+                if (role == Roles.Customer && account.UserId != currentUserId)
+                {
+                    _logger.LogWarning("Customer {UserId} denied balance check for Account {AccountId}", currentUserId, id);
                     return null;
                 }
 
@@ -109,7 +131,7 @@ namespace BankApi.Services.Implementations
             {
                 _logger.LogInformation("Creating account for user ID {UserId}", userId);
 
-                var uniqueAccountNumber = await AccountNumberHelper.GenerateUniqueAccountNumberAsync(_context);
+                var uniqueAccountNumber = await AccountNumberHelper.GenerateUniqueAccountNumberAsync(_accountRepo);
 
                 var account = new Account
                 {
@@ -149,25 +171,25 @@ namespace BankApi.Services.Implementations
             {
                 _logger.LogInformation("Fetching accounts for user ID {UserId}", userId);
 
-                var user = await _context.Users.Include(u => u.Accounts)
-                                         .FirstOrDefaultAsync(u => u.Id == userId);
+                var user = await _userRepo.GetUserWithAccountsAsync(userId);
 
                 if (user == null)
                 {
                     _logger.LogWarning("User ID {UserId} not found when fetching accounts.", userId);
-                    return new { message = "User not found." };
+                    throw new NotFoundException("User not found.");
                 }
 
-                _logger.LogInformation("Fetched {Count} accounts for user ID {UserId}", user.Accounts.Count, userId);
+                _logger.LogInformation("Fetched {Count} accounts for user ID {UserId}", user.Accounts?.Count ?? 0, userId);
 
-                var accounts = user.Accounts.Select(a => new
+                var accounts = user.Accounts?.Select(a => new
                 {
                     a.Id,
                     a.AccountNumber,
+                    a.AccountName,
                     a.AccountType,
                     a.Currency,
                     a.Balance
-                });
+                }) ?? Enumerable.Empty<object>();
 
                 return new
                 {
@@ -192,7 +214,7 @@ namespace BankApi.Services.Implementations
                 if (account == null)
                 {
                     _logger.LogError("Account update failed. Account ID {Id} not found.", dto.Id);
-                    throw new KeyNotFoundException("Account not found.");
+                    throw new NotFoundException("Account not found.");
                 }
 
                 if (dto.Balance.HasValue)
@@ -245,10 +267,11 @@ namespace BankApi.Services.Implementations
                 {
                     a.Id,
                     a.AccountNumber,
+                    a.AccountName,
                     a.AccountType,
                     a.Currency,
                     a.Balance,
-                    Owner = a.User.FirstName + " " + a.User.LastName
+                    Owner = a.User != null ? a.User.FirstName + " " + a.User.LastName : string.Empty
                 });
 
                 return new { success = true, data = result };
@@ -270,7 +293,7 @@ namespace BankApi.Services.Implementations
                 if (account == null)
                 {
                     _logger.LogWarning("Delete failed — Account ID {Id} not found.", id);
-                    throw new KeyNotFoundException("Account not found.");
+                    throw new NotFoundException("Account not found.");
                 }
 
                 await _accountRepo.DeleteAsync(account);

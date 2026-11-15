@@ -23,7 +23,7 @@ namespace BankApi.Models
         public TypeOfAccount AccountType { get; set; }
         public string AccountNumber { get; set; } = string.Empty;
         public string AccountName { get; set; } = string.Empty;
-        public double Balance { get; set; }
+        public decimal Balance { get; set; }
         public User User { get; set; }
         public ICollection<Transaction> Transactions { get; set; } = new List<Transaction>();
 
